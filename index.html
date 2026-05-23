@@ -2186,99 +2186,44 @@ function setUser(firstName, lastName, email, role){
 }
 
 function applyUserToUI(){
-  var n   = USER.name      || '';
-  var ini = USER.initials  || '—';
-  var em  = USER.email     || '';
-  var fn  = USER.firstName || '';
+  try{
+    var fn = USER.firstName||'';
+    var ln = USER.lastName||'';
+    var n  = USER.name||(fn+' '+ln).trim()||'Utente';
+    var em = USER.email||'';
+    var ini= USER.initials||((fn[0]||'?')+(ln[0]||fn[1]||'?')).toUpperCase();
 
-  /* Greeting player home */
-  var pg = document.getElementById('ph-greeting');
-  if(pg) pg.textContent = fn ? 'Ciao, '+fn : 'PlayerTracker';
+    /* Saluto home player */
+    var gr = document.getElementById('ph-greeting');
+    if(gr) gr.textContent = fn ? 'Ciao, '+fn : 'Bentornato';
 
-  /* Date */
-  var pd = document.getElementById('ph-date');
-  if(pd){
-    var d=new Date();
-    var days=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-    var months=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
-    pd.textContent=days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
-  }
+    /* Titolo home coach */
+    var cht = document.getElementById('coach-home-title');
+    if(cht) cht.textContent = USER.teamName||'La mia squadra';
 
-  /* Coach home title */
-  var cht = document.getElementById('coach-home-title');
-  if(cht) cht.textContent = USER.teamName || (fn ? 'Squadra di '+fn : 'La mia squadra');
+    /* Sub home coach */
+    var chs = document.getElementById('coach-home-sub');
+    if(chs) chs.textContent = USER.teamName ? USER.teamName : 'Nessun giocatore ancora';
 
-  /* Coach home sub */
-  var chs = document.getElementById('coach-home-sub');
-  if(chs){
-    var pl = (DATA && DATA.players && DATA.players.length) ? DATA.players.length : 0;
-    chs.textContent = pl ? pl+' giocatori attivi' : 'Nessun giocatore ancora';
-  }
+    /* Nomi dinamici */
+    document.querySelectorAll('.profile-user-name').forEach(function(el){ el.textContent = n||'—'; });
+    document.querySelectorAll('.profile-user-initials').forEach(function(el){ el.textContent = ini; });
+    document.querySelectorAll('.profile-user-email').forEach(function(el){ el.textContent = em; });
 
-  /* Profile header subs */
-  var phs = document.getElementById('profile-header-sub');
-  if(phs) phs.textContent = n;
-  var cps = document.getElementById('coach-profile-sub');
-  if(cps) cps.textContent = n;
+    /* Avatar */
+    var av = document.getElementById('coach-avatar-home');
+    if(av) av.textContent = ini;
 
-  /* All dynamic name elements */
-  document.querySelectorAll('.profile-user-name').forEach(function(el){
-    el.textContent = n || '—';
-  });
-  document.querySelectorAll('.profile-user-initials').forEach(function(el){
-    el.textContent = ini;
-  });
-  document.querySelectorAll('.profile-user-email').forEach(function(el){
-    el.textContent = em;
-  });
-  /* Grade in coach profile */
-  var gradeEl = document.getElementById('coach-profile-grade');
-  if(gradeEl && USER.grade){
-    var txt = USER.grade;
-    if(USER.license) txt += ' · ' + USER.license;
-    gradeEl.textContent = txt;
-  }
-  /* Aggiorna mini-stats profilo coach */
-  var msRank = document.getElementById('ms-rank');
-  if(msRank) msRank.textContent = '—'; /* Si aggiorna con dati reali */
+    /* Coach settings badge */
+    var csb = document.getElementById('coach-settings-plan-badge');
+    if(csb){ var ap=lsLoad('userPlan','free'); csb.textContent=ap==='pro'?'Piano Pro':ap==='club'?'Piano Club':'Piano Free'; }
+    var csb2 = document.getElementById('coach-settings-plan-badge-2');
+    if(csb2){ var ap2=lsLoad('userPlan','free'); csb2.textContent=ap2==='pro'?'Piano Pro · Attivo':ap2==='club'?'Piano Club · Attivo':'Piano Free'; csb2.style.color=ap2==='free'?'var(--slate2)':'var(--green)'; }
 
-  /* Aggiorna sezione abbonamento profilo */
-  var planName = document.getElementById('profile-plan-name');
-  var planPrice = document.getElementById('profile-plan-price');
-  var activePlan = lsLoad('userPlan', 'free');
-  var planData = { free: {name:'Free', price:'Gratuito'}, pro: {name:'Pro', price:'€9/mese'}, club: {name:'Club', price:'€29/mese'} };
-  var pd = planData[activePlan] || planData.free;
-  if(planName) planName.textContent = pd.name;
-  if(planPrice) planPrice.textContent = pd.price;
-
-  /* Aggiorna badge piano nel profilo header */
-  var planBadge = document.getElementById('coach-plan-badge');
-  if(planBadge){
-    planBadge.textContent = 'Piano ' + pd.name;
-    planBadge.style.background = activePlan==='club' ? 'var(--green-dark)' : activePlan==='pro' ? 'var(--amber-light)' : 'var(--bg)';
-    planBadge.style.color = activePlan==='club' ? '#fff' : activePlan==='pro' ? 'var(--amber-text)' : 'var(--slate)';
-  }
-
-  /* Coach profile team card */
-  var ptc = document.getElementById('coach-profile-team-card');
-  if(ptc){
-    if(USER.teamCode && USER.teamName){
-      ptc.innerHTML = '<div style="background:var(--bg);border-radius:var(--r12);padding:12px">'
-        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-        + '<div><div style="font-size:13px;font-weight:700;color:var(--navy)">'+(USER.teamName)+'</div>'
-        + '<div style="font-size:11px;color:var(--slate)">'+(DATA.players?DATA.players.length:0)+' giocatori</div></div>'
-        + '<span class="badge ok">Attiva</span></div>'
-        + '<div style="display:flex;align-items:center;justify-content:space-between">'
-        + '<div style="font-family:var(--font-num);font-size:17px;font-weight:700;letter-spacing:3px;color:var(--navy)">'+USER.teamCode+'</div>'
-        + '<button onclick="shareCode(\''+USER.teamCode+'\')" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:#fff;cursor:pointer;color:var(--navy)">📋 Copia</button>'
-        + '</div></div>';
-    }
-  }
+  }catch(e){ console.warn('applyUserToUI safe error:',e.message); }
 }
 
 
-
-/* ═══ UTILS ═══ */
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
@@ -2288,25 +2233,24 @@ function go(screen) {
   try{
     document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
     var el = document.getElementById('s-'+screen);
+    if(!el){
+      /* Screen non trovata — vai al login */
+      el = document.getElementById('s-login');
+      screen = 'login';
+    }
     if(el){
       el.classList.add('active');
       var sc = el.querySelector('.scroll-content');
       if(sc) sc.scrollTop = 0;
-    } else {
-      console.warn('Screen non trovata: s-'+screen);
-      /* Fallback: mostra login */
-      var loginEl = document.getElementById('s-login');
-      if(loginEl){ loginEl.classList.add('active'); screen='login'; }
     }
-    try{ buildNav(screen); }catch(e){ console.warn('buildNav error:',e); }
-    try{ onEnter(screen); }catch(e){ console.warn('onEnter error:',e); }
+    /* onEnter gestisce tutto il resto */
+    try{ onEnter(screen); }catch(e){ console.warn('onEnter:',e.message); }
   }catch(e){
-    console.error('go() crash:',e);
-    /* Emergenza: mostra login */
+    console.error('go crash:',e.message);
     try{
       document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
-      var el2=document.getElementById('s-login');
-      if(el2) el2.classList.add('active');
+      var login = document.getElementById('s-login');
+      if(login) login.classList.add('active');
     }catch(e2){}
   }
 }
@@ -2325,7 +2269,7 @@ updateClock(); setInterval(updateClock,30000);
 /* ═══ SPLASH ═══ */
 function startSplash(){
   /* Versione app — salvata solo per tracking, NON cancella mai nessun dato */
-  var APP_VERSION = '1.3.1';
+  var APP_VERSION = '1.3.2';
   try{
     var prev = localStorage.getItem('pt_app_version');
     if(prev !== APP_VERSION){
@@ -6727,116 +6671,83 @@ function notifyLogSaved(iri){
 
 
 function onEnter(screen){
+  /* Aggiorna UI base - sempre safe */
   try{ applyUserToUI(); }catch(e){}
-  const today=new Date();
-  const months=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
-  const days=['Domenica','Lunêdì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-  const dateStr=days[today.getDay()]+' '+today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
 
-  /* Schermata login — guida PWA + pre-compila email */
+  /* Login - guida PWA */
   if(screen==='login'){
-    var isPWA = window.navigator.standalone===true || window.matchMedia('(display-mode:standalone)').matches;
-    var guide = document.getElementById('pwa-guide');
-    if(guide) guide.style.display = isPWA ? 'block' : 'none';
     try{
-      var ls = JSON.parse(localStorage.getItem('pt_active_session')||'null');
+      var isPWA = window.navigator.standalone===true || window.matchMedia('(display-mode:standalone)').matches;
+      var guide = document.getElementById('pwa-guide');
+      if(guide) guide.style.display = isPWA ? 'block' : 'none';
+      var ls = null;
+      try{ ls = JSON.parse(localStorage.getItem('pt_session_v2')||'null'); }catch(e){}
       var le = document.getElementById('login-email');
       if(le && ls && ls.email) le.value = ls.email;
-      var lp = document.getElementById('login-pw');
-      if(lp) lp.value = '';
     }catch(e){}
   }
 
-  if(screen==='coach-profile'){ applyUserToUI(); }
-  if(screen==='coach-settings'){
-    /* Aggiorna badge piano nel settings header */
-    var spb = document.getElementById('coach-settings-plan-badge');
-    var spb2 = document.getElementById('coach-settings-plan-badge-2');
-    if(spb || spb2){
-      var ap = lsLoad('userPlan', 'free');
-      var pn = {free:'Piano Free', pro:'Piano Pro · Attivo', club:'Piano Club · Attivo'};
-      var pc = {free:'var(--slate2)', pro:'var(--green)', club:'var(--green)'};
-      var label = pn[ap] || 'Piano Free';
-      var color = pc[ap] || 'var(--slate2)';
-      if(spb){ spb.textContent = label; spb.style.color = color; }
-      if(spb2){ spb2.textContent = label; spb2.style.color = color; }
-    }
-    /* Update push button state */
-    var ptb = document.getElementById('push-toggle-btn');
-    if(ptb){
-      if(Notification.permission==='granted'){ ptb.textContent='✓ Attive'; ptb.style.background='var(--green-dark)'; }
-      else if(Notification.permission==='denied'){ ptb.textContent='Bloccate'; ptb.style.background='var(--slate)'; }
-    } /* static */ }
-  if(screen==='subscription'){ buildPlanCards(); }
-  if(screen==='player-badges'){ buildBadgesScreen(); }
-  if(screen==='sponsor'){ /* static */ }
-  if(screen==='player-messages'){ buildPlayerMessages(); }
-  if(screen==='player-training'){
-    /* Aggiorna etichetta settimana corrente */
-    var wl=document.getElementById('training-week-label');
-    if(wl){
-      var now2=new Date();
-      var day2=now2.getDay()||7;
-      var mon=new Date(now2); mon.setDate(now2.getDate()-(day2-1));
-      var sun=new Date(mon); sun.setDate(mon.getDate()+6);
-      var months2=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
-      wl.textContent='Settimana '+mon.getDate()+' '+months2[mon.getMonth()]+' - '+sun.getDate()+' '+months2[sun.getMonth()];
-    }
-    buildPlayerTraining();
+  /* Aggiornamenti non critici - ognuno in try-catch separato */
+  if(screen==='coach-home'){
+    setTimeout(function(){
+      try{ buildCoachAlerts(); }catch(e){ console.warn('buildCoachAlerts:',e.message); }
+      try{ buildCoachTeamRank(); }catch(e){}
+      try{ updateCoachHomeBadges(); }catch(e){}
+    }, 100);
   }
-  if(screen==='player-availability'){ buildPlayerAvailability(); }
-  if(screen==='player-injury'){ buildPlayerInjury(); }
-  if(screen==='coach-messages'){ setMsgTab('squad'); }
-  if(screen==='coach-training'){ buildCoachTraining(); }
-  if(screen==='coach-availability'){ buildCoachAvailability(); }
-  if(screen==='player-home'){ setTimeout(function(){ try{buildPlayerHome();}catch(e){console.error('buildPlayerHome crash:',e.stack);} },50); }
+
+  if(screen==='player-home'){
+    setTimeout(function(){
+      try{ buildPlayerHome(); }catch(e){ console.warn('buildPlayerHome:',e.message); }
+    }, 100);
+  }
+
   if(screen==='player-log'){
     try{
-      const ld=document.getElementById('log-date'); if(ld)ld.textContent=today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
-      buildRpeGrid(); buildPainZones(); updateIriPreview();
-    }catch(e){console.error('player-log crash:',e);}
+      var ld=document.getElementById('log-date');
+      if(ld){ var d=new Date(); var m=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic']; ld.textContent=d.getDate()+' '+m[d.getMonth()]; }
+      buildRpeGrid();
+    }catch(e){}
   }
-  if(screen==='player-tests'){ try{buildTestCards(); buildTestChartTabs(); setTimeout(()=>buildTestChart(),80);}catch(e){} }
-  if(screen==='player-ranking'){
-    try{
-      const sl=document.getElementById('rank-limit-slider');
-      if(sl){ sl.value=rankLimit; document.getElementById('rank-limit-label').textContent=rankLimit; }
-      buildRankFilters(); buildRankList(); updateMySummary();
-    }catch(e){console.error('player-ranking crash:',e);}
-  }
-  if(screen==='player-settings'){ try{applyUserToUI(); restoreWearableStates();}catch(e){} }
+
+  if(screen==='player-tests'){ try{ buildTestCards(); setTimeout(function(){try{buildTestChart();}catch(e){}},100); }catch(e){} }
+
+  if(screen==='player-ranking'){ try{ buildRankList(); updateMySummary(); }catch(e){} }
+
+  if(screen==='player-settings'){ try{ restoreWearableStates(); }catch(e){} }
+
   if(screen==='player-profile'){
+    try{ loadProfileDisplay(); }catch(e){}
+    setTimeout(function(){ try{buildIriHistChart();}catch(e){}; }, 150);
+  }
+
+  if(screen==='coach-squad'){ try{ buildSquadList(); }catch(e){} }
+
+  if(screen==='coach-settings'){
     try{
-      applyUserToUI();
-      loadProfileDisplay();
-      var bcp = document.getElementById('badge-count-preview');
-      if(bcp && typeof getEarnedBadges === 'function'){
-        var r = getEarnedBadges();
-        bcp.textContent = r.earned.length + ' su ' + BADGES.length + ' sbloccati';
-      }
-      setTimeout(function(){ try{buildIriHistChart();}catch(e){} },80);
-    }catch(e){console.error('player-profile crash:',e);}
+      var ap=lsLoad('userPlan','free');
+      var pn={free:'Piano Free',pro:'Piano Pro · Attivo',club:'Piano Club · Attivo'};
+      var spb=document.getElementById('coach-settings-plan-badge');
+      if(spb){ spb.textContent=pn[ap]||'Piano Free'; spb.style.color=ap==='free'?'var(--slate2)':'var(--green)'; }
+      var spb2=document.getElementById('coach-settings-plan-badge-2');
+      if(spb2){ spb2.textContent=pn[ap]||'Piano Free'; spb2.style.color=ap==='free'?'var(--slate2)':'var(--green)'; }
+    }catch(e){}
   }
-  if(screen==='coach-home'){
-    try{buildCoachAlerts();}catch(e){console.error('coach-home crash:',e);}
-    try{buildCoachTeamRank();}catch(e){}
-    try{updateCoachHomeBadges();}catch(e){}
-    /* initPushForCoach solo se richiesto dall'utente */
-  }
-  if(screen==='coach-squad'){ try{buildSquadFilters(); buildSquadList();}catch(e){console.error('coach-squad crash:',e);} }
-  if(screen==='faq'){ try{buildFaqScreen();}catch(e){} }
-  if(screen==='privacy'){ try{setPrivacyTab(1);}catch(e){} }
-  if(screen==='player-messages'){ buildPlayerMessages(); }
-  if(screen==='coach-messages'){ setMsgTab('squad'); }
-  if(screen==='coach-insert-test'){
-    const d=document.getElementById('it-date'); if(d)d.value=today.toISOString().split('T')[0];
-    buildTestTypeOpts();
-    buildRecentTests();
-  }
-  if(screen==='coach-charts'){ buildChartFilterTabs(); setTimeout(()=>buildSquadCharts(),80); }
-  if(screen==='coach-ranking'){ buildCoachRankTeams(); buildPlayerRankFilters(); buildCoachRankPlayers(); switchRankTab('teams'); }
-  if(screen==='coach-team'){ buildTeamRoster(); }
+
+  if(screen==='player-settings'){ try{ applyUserToUI(); }catch(e){} }
+  if(screen==='coach-training'){ try{ buildCoachTraining(); }catch(e){} }
+  if(screen==='player-training'){ try{ buildPlayerTraining(); }catch(e){} }
+  if(screen==='coach-availability'){ try{ buildCoachAvailability(); }catch(e){} }
+  if(screen==='player-availability'){ try{ buildPlayerAvailability(); }catch(e){} }
+  if(screen==='coach-messages'){ try{ buildCoachMessages(); }catch(e){} }
+  if(screen==='player-messages'){ try{ buildPlayerMessages(); }catch(e){} }
+  if(screen==='badges'){ try{ buildBadgesScreen(); }catch(e){} }
+  if(screen==='faq'){ try{ buildFaqScreen(); }catch(e){} }
+  if(screen==='privacy'){ try{ setPrivacyTab(1); }catch(e){} }
+  if(screen==='subscription'){ try{ updateCurrentPlanBanner(); }catch(e){} }
+
+  /* Nav */
+  try{ buildNav(screen); }catch(e){}
 }
-</script>
-</body>
-</html>
+
+
