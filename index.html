@@ -2210,7 +2210,10 @@ function applyUserToUI(){
 
   /* Coach home sub */
   var chs = document.getElementById('coach-home-sub');
-  if(chs) chs.textContent = DATA.players.length ? DATA.players.length+' giocatori attivi' : 'Nessun giocatore ancora';
+  if(chs){
+    var pl = (DATA && DATA.players && DATA.players.length) ? DATA.players.length : 0;
+    chs.textContent = pl ? pl+' giocatori attivi' : 'Nessun giocatore ancora';
+  }
 
   /* Profile header subs */
   var phs = document.getElementById('profile-header-sub');
@@ -2282,16 +2285,30 @@ function toast(msg) {
   setTimeout(()=>t.classList.remove('show'),2200);
 }
 function go(screen) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  const el = document.getElementById('s-'+screen);
-  if(el){
-    el.classList.add('active');
-    /* Reset scroll inside the scroll-content (not the screen itself which is position:absolute) */
-    const sc = el.querySelector('.scroll-content');
-    if(sc) sc.scrollTop = 0;
+  try{
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+    var el = document.getElementById('s-'+screen);
+    if(el){
+      el.classList.add('active');
+      var sc = el.querySelector('.scroll-content');
+      if(sc) sc.scrollTop = 0;
+    } else {
+      console.warn('Screen non trovata: s-'+screen);
+      /* Fallback: mostra login */
+      var loginEl = document.getElementById('s-login');
+      if(loginEl){ loginEl.classList.add('active'); screen='login'; }
+    }
+    try{ buildNav(screen); }catch(e){ console.warn('buildNav error:',e); }
+    try{ onEnter(screen); }catch(e){ console.warn('onEnter error:',e); }
+  }catch(e){
+    console.error('go() crash:',e);
+    /* Emergenza: mostra login */
+    try{
+      document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+      var el2=document.getElementById('s-login');
+      if(el2) el2.classList.add('active');
+    }catch(e2){}
   }
-  buildNav(screen);
-  onEnter(screen);
 }
 function qs(sel){ return document.querySelector(sel); }
 function qsa(sel){ return document.querySelectorAll(sel); }
@@ -2308,7 +2325,7 @@ updateClock(); setInterval(updateClock,30000);
 /* ═══ SPLASH ═══ */
 function startSplash(){
   /* Versione app — salvata solo per tracking, NON cancella mai nessun dato */
-  var APP_VERSION = '1.2.3';
+  var APP_VERSION = '1.3.1';
   try{
     var prev = localStorage.getItem('pt_app_version');
     if(prev !== APP_VERSION){
@@ -2334,94 +2351,115 @@ function startSplash(){
 }
 
 /* ── SESSIONE PERSISTENTE — ricorda l'utente anche dopo chiusura ── */
+/* ═══════════════════════════════════════════════════════
+   SISTEMA SESSIONE — funziona come Instagram/TikTok
+   Login una volta → rimane per sempre fino al logout
+   ═══════════════════════════════════════════════════════ */
+
+var SESSION_KEY = 'pt_session_v2';
+
 function saveSession(user){
+  /* Salva tutto quello che serve per ripristinare il login */
+  if(!user || !user.email || !user.role) return;
+  var s = {
+    id:       user.id       || '',
+    email:    user.email    || '',
+    name:     user.name     || '',
+    firstName:user.firstName|| '',
+    lastName: user.lastName || '',
+    role:     user.role     || 'player',
+    initials: user.initials || '',
+    teamCode: user.teamCode || '',
+    teamName: user.teamName || '',
+    grade:    user.grade    || '',
+    license:  user.license  || '',
+    savedAt:  Date.now()
+  };
   try{
-    var session = {
-      id:        user.id||'',
-      email:     user.email||'',
-      name:      user.name||'',
-      firstName: user.firstName||'',
-      lastName:  user.lastName||'',
-      role:      user.role||'player',
-      initials:  user.initials||'',
-      teamCode:  user.teamCode||'',
-      teamName:  user.teamName||'',
-      grade:     user.grade||'',
-      license:   user.license||'',
-      savedAt:   Date.now()
-    };
-    localStorage.setItem('pt_active_session', JSON.stringify(session));
-    /* Backup ridondante con chiave diversa — doppia protezione */
-    localStorage.setItem('pt_session_backup', JSON.stringify(session));
-    console.log('✓ Sessione salvata per', user.email, '| ruolo:', user.role, '| squadra:', user.teamName);
-  } catch(e){ console.warn('saveSession error:', e); }
+    var json = JSON.stringify(s);
+    localStorage.setItem(SESSION_KEY, json);
+    localStorage.setItem(SESSION_KEY+'_bak', json); /* backup */
+    localStorage.setItem('pt_active_session', json); /* compatibilità vecchio codice */
+    console.log('SESSION SAVED:', s.email, s.role);
+  }catch(e){ console.warn('saveSession error:',e); }
+}
+
+function loadSession(){
+  try{
+    var raw = localStorage.getItem(SESSION_KEY)
+           || localStorage.getItem(SESSION_KEY+'_bak')
+           || localStorage.getItem('pt_active_session');
+    if(!raw) return null;
+    var s = JSON.parse(raw);
+    if(!s || !s.email || !s.role) return null;
+    if(s.role!=='coach' && s.role!=='player') return null;
+    return s;
+  }catch(e){ return null; }
 }
 
 function clearSession(){
-  try{ localStorage.removeItem('pt_active_session'); } catch(e){}
-}
-
-function checkSavedSession(){
   try{
-    var raw = localStorage.getItem('pt_active_session')
-           || localStorage.getItem('pt_session_backup');
-    if(!raw){ go('login'); return; }
-    var session = JSON.parse(raw);
-
-    /* Validazione STRETTA — tutti i campi essenziali devono essere presenti */
-    if(!session
-      || !session.email
-      || !session.name
-      || !session.role
-      || (session.role!=='coach' && session.role!=='player')
-    ){
-      console.warn('Sessione incompleta — resetto');
-      clearSession();
-      go('login');
-      return;
-    }
-
-    /* Scadenza 30 giorni */
-    var age = Date.now() - (session.savedAt || 0);
-    if(age > 30*24*60*60*1000){
-      clearSession(); go('login'); return;
-    }
-
-    /* Ripristina USER */
-    USER.id        = session.id        || '';
-    USER.email     = session.email;
-    USER.name      = session.name;
-    USER.firstName = session.firstName || session.name.split(' ')[0];
-    USER.lastName  = session.lastName  || '';
-    USER.role      = session.role;
-    USER.initials  = session.initials  || (USER.firstName[0]+(USER.lastName[0]||USER.firstName[1]||'?')).toUpperCase();
-    USER.teamCode  = session.teamCode  || '';
-    USER.teamName  = session.teamName  || '';
-    USER.grade     = session.grade     || '';
-    USER.license   = session.license   || '';
-
-    applyUserToUI();
-    saveSession(USER);
-    go(USER.role==='coach' ? 'coach-home' : 'player-home');
-    if(USER.id) setTimeout(function(){
-      loadRealData(USER.id,USER.role,USER.teamCode).catch(function(){});
-    },1500);
-    if(USER.role==='player') setTimeout(checkBadgesOnLogin,2500);
-
-  } catch(e){
-    console.warn('checkSavedSession error — resetto tutto:', e);
-    clearSession();
-    go('login');
-  }
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(SESSION_KEY+'_bak');
+    localStorage.removeItem('pt_active_session');
+    localStorage.removeItem('pt_session_backup');
+  }catch(e){}
 }
 
-/* RESET EMERGENZA — chiamabile dalla console del browser */
 function emergencyReset(){
-  clearSession();
   try{ localStorage.clear(); }catch(e){}
   location.reload();
 }
+
+function checkSavedSession(){
+  var s = loadSession();
+  if(!s){ go('login'); return; }
+  /* Applica sessione */
+  USER.id        = s.id        || '';
+  USER.email     = s.email     || '';
+  USER.name      = s.name      || '';
+  USER.firstName = s.firstName || s.name.split(' ')[0] || '';
+  USER.lastName  = s.lastName  || '';
+  USER.role      = s.role      || 'player';
+  USER.initials  = s.initials  || ((USER.firstName[0]||'?')+(USER.lastName[0]||USER.firstName[1]||'?')).toUpperCase();
+  USER.teamCode  = s.teamCode  || '';
+  USER.teamName  = s.teamName  || '';
+  USER.grade     = s.grade     || '';
+  USER.license   = s.license   || '';
+  /* Inizializza DATA in modo sicuro */
+  if(!DATA) DATA = {};
+  if(!DATA.players) DATA.players = [];
+  if(!DATA.weights) DATA.weights = [];
+  /* Rinnova sessione */
+  saveSession(USER);
+  try{ applyUserToUI(); }catch(e){}
+  go(USER.role==='coach' ? 'coach-home' : 'player-home');
+  /* Aggiorna dati in background — non bloccante */
+  setTimeout(function(){
+    try{ if(USER.id) loadRealData(USER.id,USER.role,USER.teamCode).catch(function(){}); }catch(e){}
+  },2000);
+  if(USER.role==='player') setTimeout(function(){
+    try{ checkBadgesOnLogin(); }catch(e){}
+  },3000);
+}
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',startSplash); } else { setTimeout(startSplash,50); }
+
+/* Catch globale — se qualcosa crasha mostra il login invece della pagina bianca */
+window.onerror = function(msg, src, line, col, err){
+  console.error('CRASH:', msg, 'linea:', line);
+  try{
+    var s = document.getElementById('splash');
+    if(s) s.style.display = 'none';
+    /* Nascondi tutti gli schermi */
+    document.querySelectorAll('.screen').forEach(function(el){ el.classList.remove('active'); });
+    /* Mostra login */
+    var login = document.getElementById('s-login');
+    if(login) login.classList.add('active');
+    /* Mostra bottom nav giusto */
+    document.querySelectorAll('.bottom-nav').forEach(function(el){ el.style.display='none'; });
+  } catch(e2){}
+  return true; /* non mostrare alert di errore */
+};
 
 /* ── SERVICE WORKER per funzionamento offline ── */
 /* Service Worker DISABILITATO — causa problemi di cache su iOS PWA.
@@ -2610,21 +2648,33 @@ async function doLogin(){
 
 /* Helper: applica login e porta alla home */
 function _applyLogin(name,email,role,id,teamCode,teamName,grade,license,pw){
-  clearData();DATA.loginRole=role;
-  var np=(name||'Utente').split(' ');
-  setUser(np[0],np.slice(1).join(' '),email,role);
-  USER.id=id||'';USER.teamCode=teamCode||'';USER.teamName=teamName||'';
-  USER.grade=grade||'';USER.license=license||'';
-  if(pw)saveLocalUser({id:id,name:name,email:email,pw:pw,role:role,team_code:teamCode,team_name:teamName,grade:grade,license:license});
+  clearData();
+  DATA.loginRole = role;
+  var parts = (name||'Utente').split(' ');
+  /* Imposta TUTTI i campi USER prima di salvare */
+  USER.firstName = parts[0]||'';
+  USER.lastName  = parts.slice(1).join(' ')||'';
+  USER.name      = name||'';
+  USER.email     = email||'';
+  USER.role      = role||'player';
+  USER.initials  = ((parts[0]||'?')[0]+((parts[1]||parts[0]||'?')[0]||'?')).toUpperCase();
+  USER.id        = id||'';
+  USER.teamCode  = teamCode||'';
+  USER.teamName  = teamName||'';
+  USER.grade     = grade||'';
+  USER.license   = license||'';
+  /* Salva in localStorage locale */
+  if(pw) saveLocalUser({id:id,name:name,email:email,pw:pw,role:role,
+    team_code:teamCode,team_name:teamName,grade:grade,license:license});
+  /* Salva sessione — ORA tutti i campi sono completi */
   saveSession(USER);
   hideLoading();
   go(role==='player'?'player-home':'coach-home');
   setTimeout(applyUserToUI,100);
   toast('Accesso effettuato ✓');
-  if(role==='player')setTimeout(checkBadgesOnLogin,1500);
-  /* AUTO-SYNC: ricrea account su Supabase in background se non esiste */
-  /* Questo permette agli altri dispositivi/PWA di trovare l'account */
-  setTimeout(function(){ _syncUserToSupabase(id,name,email,role,teamCode,grade,license); },2000);
+  if(role==='player') setTimeout(function(){ try{checkBadgesOnLogin();}catch(e){} },1500);
+  /* Sync Supabase in background */
+  setTimeout(function(){ try{_syncUserToSupabase(id,name,email,role,teamCode,grade,license);}catch(e){} },3000);
 }
 
 /* Sincronizza utente su Supabase in background (silenzioso) */
@@ -2876,21 +2926,27 @@ async function doRegister(){
 
   /* Salvataggio locale garantito (sempre) — include password per login offline */
   saveLocalUser({id:userId,name:fullName,email:email,pw:pw,role:role,team_code:teamCode,team_name:teamName,grade:USER.grade||'',license:USER.license||''});
-  /* Salva anche sessione attiva subito dopo registrazione */
-  USER.id=userId; USER.teamCode=teamCode||''; USER.teamName=teamName;
-  saveSession(USER);
 
   clearData();
   DATA.loginRole=role;
-  setUser(fName,lName,email,role);
-  USER.id=userId;
+  /* Imposta TUTTI i campi USER */
+  var parts=(fullName||'Utente').split(' ');
+  USER.firstName=parts[0]||'';
+  USER.lastName=parts.slice(1).join(' ')||'';
+  USER.name=fullName||'';
+  USER.email=email||'';
+  USER.role=role||'player';
+  USER.initials=((parts[0]||'?')[0]+((parts[1]||parts[0]||'?')[0]||'?')).toUpperCase();
+  USER.id=userId||'';
   USER.teamCode=teamCode||'';
-  USER.teamName=teamName;
+  USER.teamName=teamName||'';
+  /* Salva sessione ORA — tutti i campi sono completi */
+  saveSession(USER);
 
   hideLoading();
   go(role==='player'?'player-home':'coach-home');
   setTimeout(applyUserToUI,100);
-  setTimeout(function(){ startOnboarding(role); },800);
+  setTimeout(function(){ try{startOnboarding(role);}catch(e){} },800);
 
   if(role==='coach'&&teamCode){
     setTimeout(function(){
@@ -3274,85 +3330,96 @@ function iriStatus(iri){
 }
 
 function buildPlayerHome(){
-  /* Date header */
-  var ph = document.getElementById('ph-date');
-  if(ph){
-    var d = new Date();
-    var days = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
-    var months = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
-    ph.textContent = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()]+' '+d.getFullYear();
-  }
+  /* Versione indistruttibile — ogni sezione in try-catch separato */
+  
+  /* 1. Data e saluto */
+  try{
+    var ph = document.getElementById('ph-date');
+    if(ph){
+      var d = new Date();
+      var days = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+      var months = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+      ph.textContent = days[d.getDay()]+' '+d.getDate()+' '+months[d.getMonth()];
+    }
+    var gr = document.getElementById('ph-greeting');
+    if(gr) gr.textContent = 'Ciao'+(USER.firstName ? ', '+USER.firstName : '');
+  }catch(e){}
 
-  /* Greeting */
-  var gr = document.getElementById('ph-greeting');
-  if(gr) gr.textContent = USER.firstName ? 'Ciao, '+USER.firstName : 'PlayerTracker';
+  /* 2. IRI */
+  try{
+    var logs = lsLoad('logs', []);
+    var result = calcIRI(logs);
+    var status = iriStatus(result ? result.iri : null);
+    var card = document.getElementById('ph-iri-card');
+    var iriEl = document.getElementById('ph-iri');
+    var lblEl = document.getElementById('ph-iri-label');
+    var acwrEl = document.getElementById('ph-acwr');
+    var barEl  = document.getElementById('ph-iri-bar');
+    if(card)  card.style.background = status.bg;
+    if(iriEl) iriEl.textContent = result && result.iri !== null ? result.iri : '—';
+    if(lblEl) lblEl.textContent = status.label;
+    if(acwrEl) acwrEl.textContent = result && result.acwr ? result.acwr.toFixed(2) : '—';
+    if(barEl)  barEl.style.width = (result && result.iri ? result.iri : 0) + '%';
+  }catch(e){ console.warn('IRI section error:',e); }
+
+  /* 3. Log CTA */
+  try{
+    var today = new Date().toISOString().split('T')[0];
+    var logs2 = lsLoad('logs', []);
+    var loggedToday = logs2.some(function(l){ return l.date === today; });
+    var cta = document.getElementById('ph-log-cta');
+    if(cta) cta.style.display = loggedToday ? 'none' : 'block';
+  }catch(e){}
+
+  /* 4. Storico log ultimi 7 giorni */
+  try{
+    var hist = document.getElementById('ph-log-history');
+    if(hist){
+      var logs3 = lsLoad('logs', []);
+      var today3 = new Date().toISOString().split('T')[0];
+      if(!logs3 || logs3.length === 0){
+        hist.innerHTML = '<div style="text-align:center;padding:20px;color:var(--slate);font-size:13px"><div style="font-size:28px;margin-bottom:8px">📋</div>Nessun log inserito ancora.<br><span style="font-size:12px">Registra il tuo primo allenamento.</span></div>';
+      } else {
+        var rpeColors = ['','#22c55e','#84cc16','#eab308','#f97316','#ef4444','#dc2626','#b91c1c','#991b1b','#7f1d1d','#450a0a'];
+        var dayNames = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+        hist.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">' +
+          logs3.slice(-7).reverse().map(function(l){
+            try{
+              var dd = new Date(l.date);
+              var isToday = l.date === today3;
+              var col = rpeColors[Math.min(l.rpe||5, 10)] || '#22c55e';
+              return '<div style="flex-shrink:0;text-align:center;background:#fff;border:1.5px solid '+(isToday?'var(--green)':'var(--border)')+';border-radius:12px;padding:8px 10px;min-width:52px">'
+                + '<div style="font-size:10px;color:var(--slate);margin-bottom:3px">'+dayNames[dd.getDay()]+'</div>'
+                + '<div style="font-size:10px;font-weight:600;color:var(--slate);margin-bottom:5px">'+dd.getDate()+'</div>'
+                + '<div style="width:28px;height:28px;border-radius:50%;background:'+col+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;margin:0 auto">'+l.rpe+'</div>'
+                + '<div style="font-size:9px;color:var(--slate2);margin-top:3px">'+(l.duration||60)+'min</div>'
+                + '</div>';
+            }catch(ex){ return ''; }
+          }).join('') + '</div>';
+      }
+    }
+  }catch(e){ console.warn('Log history error:',e); }
+
+  /* 5. Squadra info */
+  try{
+    var teamInfo = document.getElementById('ph-team-info');
+    if(teamInfo){
+      if(USER.teamCode && USER.teamName){
+        teamInfo.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between">'
+          +'<div><div style="font-size:14px;font-weight:700;color:var(--navy)">'+USER.teamName+'</div>'
+          +'<div style="font-size:12px;color:var(--slate)">Codice: '+USER.teamCode+'</div></div>'
+          +'<span style="font-size:12px;font-weight:600;color:var(--green-dark);cursor:pointer" onclick="go(\'player-ranking\')">Classifica →</span></div>';
+      } else {
+        teamInfo.innerHTML = '<div style="text-align:center;padding:14px;color:var(--slate);font-size:13px"><div style="font-size:22px;margin-bottom:6px">⚽</div>Non sei ancora in nessuna squadra.<br><button class="btn outline sm" style="margin-top:8px;width:auto;padding:6px 16px" onclick="go(\'player-profile\')">+ Inserisci codice squadra</button></div>';
+      }
+    }
+  }catch(e){}
+}
 
   /* Load logs from localStorage */
   var logs = lsLoad('logs', []);
   var result = calcIRI(logs);
   var status = iriStatus(result.iri);
-
-  /* IRI card */
-  var card = document.getElementById('ph-iri-card');
-  var iriEl = document.getElementById('ph-iri');
-  var lblEl = document.getElementById('ph-iri-label');
-  var acwrEl = document.getElementById('ph-acwr');
-  var barEl  = document.getElementById('ph-iri-bar');
-
-  if(card)  card.style.background = status.bg;
-  if(iriEl) iriEl.textContent = result.iri !== null ? result.iri : '—';
-  if(lblEl) lblEl.textContent = status.label;
-  if(acwrEl) acwrEl.textContent = result.acwr !== null ? result.acwr.toFixed(2) : '—';
-  if(barEl)  barEl.style.width = (result.iri || 0) + '%';
-
-  /* Log CTA — hide if already logged today */
-  var today = new Date().toISOString().split('T')[0];
-  var loggedToday = logs.some(function(l){ return l.date === today; });
-  var cta = document.getElementById('ph-log-cta');
-  if(cta) cta.style.display = loggedToday ? 'none' : 'block';
-
-  /* Log history — last 7 days */
-  var hist = document.getElementById('ph-log-history');
-  if(hist){
-    if(logs.length === 0){
-      hist.innerHTML = '<div style="text-align:center;padding:20px;color:var(--slate);font-size:13px"><div style="font-size:28px;margin-bottom:8px">📋</div>Nessun log inserito ancora.<br><span style="font-size:12px;color:var(--slate2)">Registra il tuo primo allenamento.</span></div>';
-    } else {
-      var rpeColors = ['','#22c55e','#84cc16','#eab308','#f97316','#ef4444','#dc2626','#b91c1c','#991b1b','#7f1d1d','#450a0a'];
-      hist.innerHTML = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">' +
-        logs.slice(-7).reverse().map(function(l){
-          var d = new Date(l.date);
-          var dayNames = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
-          var isToday = l.date === today;
-          var col = rpeColors[Math.min(l.rpe||5, 10)];
-          return '<div style="flex-shrink:0;text-align:center;background:#fff;border:1.5px solid '+(isToday?'var(--green)':'var(--border)')+';border-radius:var(--r12);padding:8px 10px;min-width:52px">'
-            + '<div style="font-size:10px;color:var(--slate);margin-bottom:3px">'+dayNames[d.getDay()]+'</div>'
-            + '<div style="font-size:10px;font-weight:600;color:var(--slate);margin-bottom:5px">'+d.getDate()+'</div>'
-            + '<div style="width:28px;height:28px;border-radius:50%;background:'+col+';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;margin:0 auto">'+l.rpe+'</div>'
-            + '<div style="font-size:9px;color:var(--slate2);margin-top:3px">'+l.duration+'min</div>'
-            + '</div>';
-        }).join('') + '</div>';
-    }
-  }
-
-  /* Team info */
-  var teamInfo = document.getElementById('ph-team-info');
-  if(teamInfo){
-    if(USER.teamCode && USER.teamName){
-      teamInfo.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0">'
-        + '<div><div style="font-size:13px;font-weight:600;color:var(--navy)">'+USER.teamName+'</div>'
-        + '<div style="font-size:11px;color:var(--slate)">Codice: '+USER.teamCode+'</div></div>'
-        + '<span class="badge ok">Attiva</span></div>';
-    } else if(USER.teamCode){
-      teamInfo.innerHTML = '<div style="font-size:13px;color:var(--slate)">Codice: <strong>'+USER.teamCode+'</strong></div>';
-    } else {
-      teamInfo.innerHTML = '<div style="text-align:center;padding:14px;color:var(--slate);font-size:13px"><div style="font-size:22px;margin-bottom:6px">⚽</div>Non sei ancora in nessuna squadra.<br><button class="btn outline sm" style="margin-top:8px;width:auto;padding:6px 16px" onclick="go(\'player-profile\')">+ Inserisci codice squadra</button></div>';
-    }
-  }
-}
-
-/* ── SALVA LOG (localStorage + Supabase) ── */
-
-
 
 /* ═══ TEST CHARTS ═══ */
 function getTests(){ return DATA.tests; }
@@ -3592,7 +3659,7 @@ function populateWithingsSel(){
     var o=document.createElement('option'); o.disabled=true;
     o.text='Nessun giocatore nella squadra'; sel.add(o); return;
   }
-  DATA.players.forEach(function(p){
+  (DATA.players||[]).forEach(function(p){
     var o=document.createElement('option'); o.value=p.id;
     o.text=p.name+(p.pos&&p.pos!=='—'?' · '+p.pos:''); sel.add(o);
   });
@@ -4694,7 +4761,7 @@ function buildCoachMessages(){
         return;
       }
       var html = '<div style="background:#fff">';
-      DATA.players.forEach(function(p){
+      (DATA.players||[]).forEach(function(p){
         var email = p.email || '';
         var thread = m.direct[email] || [];
         var lastMsg = thread.length > 0 ? thread[thread.length-1] : null;
@@ -4750,7 +4817,7 @@ function setMsgTab(tab){
   var sel = document.getElementById('coach-msg-to');
   if(sel && DATA.players){
     sel.innerHTML = '<option value="all">📢 Tutta la squadra</option>';
-    DATA.players.forEach(function(p){
+    (DATA.players||[]).forEach(function(p){
       if(p.email){
         var o = document.createElement('option');
         o.value = p.email;
@@ -5038,7 +5105,7 @@ function applySquadFilters(){
   var pos = SQUAD_FILTERS.pos;
   var year = SQUAD_FILTERS.year;
   if(!DATA.players) return [];
-  return DATA.players.filter(function(p){
+  return (DATA.players||[]).filter(function(p){
     if(pos !== 'all' && p.pos !== pos) return false;
     if(year !== 'all'){
       var py = p.birthYear || (p.birth ? new Date(p.birth).getFullYear() : null);
@@ -5054,7 +5121,7 @@ function buildSquadFilters(){
   /* Calcola annate uniche disponibili */
   var years = [];
   if(DATA.players){
-    DATA.players.forEach(function(p){
+    (DATA.players||[]).forEach(function(p){
       var y = p.birthYear || (p.birth ? new Date(p.birth).getFullYear() : null);
       if(y && years.indexOf(y) < 0) years.push(y);
     });
@@ -5770,14 +5837,14 @@ function buildCoachAlerts(){
 
   if(empty) empty.style.display='none';
 
-  var nOk   = DATA.players.filter(function(p){return p.status==='ok';}).length;
-  var nWarn = DATA.players.filter(function(p){return p.status==='warn';}).length;
-  var nRisk = DATA.players.filter(function(p){return p.status==='danger';}).length;
+  var nOk   = (DATA.players||[]).filter(function(p){return p.status==='ok';}).length;
+  var nWarn = (DATA.players||[]).filter(function(p){return p.status==='warn';}).length;
+  var nRisk = (DATA.players||[]).filter(function(p){return p.status==='danger';}).length;
   if(okEl)   okEl.textContent=nOk;
   if(warnEl) warnEl.textContent=nWarn;
   if(riskEl) riskEl.textContent=nRisk;
 
-  var atRisk = DATA.players.filter(function(p){return p.status!=='ok';});
+  var atRisk = (DATA.players||[]).filter(function(p){return p.status!=='ok';});
   if(banner){
     if(atRisk.length>0){
       banner.style.display='block';
@@ -5791,7 +5858,7 @@ function buildCoachAlerts(){
 
   if(squadSub) squadSub.textContent=(USER.teamName||'La tua squadra')+' · '+DATA.players.length+' giocatori';
 
-  DATA.players.filter(function(p){return p.status!=='ok';}).forEach(function(p){
+  (DATA.players||[]).filter(function(p){return p.status!=='ok';}).forEach(function(p){
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(239,68,68,.2);cursor:pointer';
     row.onclick=()=>openPlayerDetail(p);
@@ -5811,7 +5878,7 @@ function buildCoachTeamRank(){
   }
   el.innerHTML='';
   var medals=['#f59e0b','#94a3b8','#c2410c'];
-  DATA.teams.slice(0,4).forEach(function(t,i){
+  (DATA.teams||[]).slice(0,4).forEach(function(t,i){
     var row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);cursor:pointer';
     if(i===3)row.style.borderBottom='none';
@@ -6155,14 +6222,14 @@ function buildSquadCharts(){
   const lower=t.lowerBetter;
   const title=document.getElementById('squad-chart-title');
   if(title)title.textContent=t.label+' — confronto squadra';
-  const vals=DATA.players.map(function(p){ return p[t.key]||0; });
+  const vals=(DATA.players||[]).map(function(p){ return p[t.key]||0; });
   const avg=vals.reduce(function(a,b){ return a+b; },0)/Math.max(vals.length,1);
   destroyChart('squadBar');
   const canvas=document.getElementById('squadBarChart'); if(!canvas)return;
   charts['squadBar']=new Chart(canvas,{
     type:'bar',
     data:{
-      labels:DATA.players.map(p=>p.init),
+      labels:(DATA.players||[]).map(p=>p.init),
       datasets:[
         {label:t.label,data:vals,backgroundColor:t.color+'99',borderColor:t.color,borderWidth:1,borderRadius:6},
         {label:'Media',data:vals.map(function(){ return avg; }),type:'line',borderColor:'#94a3b8',borderDash:[5,4],borderWidth:1.5,pointRadius:0,fill:false}
@@ -6203,7 +6270,7 @@ function buildCoachRankTeams(){
   }
   var medals=['#f59e0b','#94a3b8','#c2410c'];
   el.innerHTML='';
-  DATA.teams.forEach(function(t,i){
+  (DATA.teams||[]).forEach(function(t,i){
     var row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)';
     row.innerHTML='<div style="width:28px;height:28px;border-radius:50%;background:'+(i<3?medals[i]+'22':'var(--bg)')+';color:'+(i<3?medals[i]:'var(--slate)')+';font-weight:700;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">'+(i+1)+'</div>'
@@ -6292,7 +6359,7 @@ function buildTeamRoster(){
           var statusTx={ok:'var(--green-text)',warn:'var(--amber-text)',danger:'var(--red-text)'};
           /* Deduplica per sicurezza */
           var uniquePlayers = []; var seenIds2 = {};
-          DATA.players.forEach(function(p){ if(!seenIds2[p.id]){ seenIds2[p.id]=true; uniquePlayers.push(p); } });
+          (DATA.players||[]).forEach(function(p){ if(!seenIds2[p.id]){ seenIds2[p.id]=true; uniquePlayers.push(p); } });
           el.innerHTML = uniquePlayers.map(function(p){
             return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">' +
               '<div class="avatar" style="background:'+(statusBg[p.status]||'var(--bg)')+';color:'+(statusTx[p.status]||'var(--slate)')+';font-size:11px">'+(p.init||'?')+'</div>' +
@@ -6321,7 +6388,7 @@ async function removePlayerFromTeam(playerId){
     }catch(e){ console.warn('removePlayer error:',e.message||e); }
   }
   /* Aggiorna DATA.players localmente subito */
-  DATA.players = DATA.players.filter(function(p){ return String(p.id) !== String(playerId); });
+  DATA.players = (DATA.players||[]).filter(function(p){ return String(p.id) !== String(playerId); });
   buildTeamRoster();
   buildCoachAlerts();
   toast('Giocatore rimosso ✓');
@@ -6594,7 +6661,7 @@ function checkAndSendIRIAlerts(){
   /* Ricorda quali alert sono già stati inviati oggi */
   var today = new Date().toISOString().split('T')[0];
   var sent = lsLoad('alertsSent_'+today, {});
-  var atRisk = DATA.players.filter(function(p){ return p.iri >= 60; });
+  var atRisk = (DATA.players||[]).filter(function(p){ return p.iri >= 60; });
 
   atRisk.forEach(function(p){
     if(sent[p.id]) return; /* già notificato oggi */
@@ -6660,10 +6727,10 @@ function notifyLogSaved(iri){
 
 
 function onEnter(screen){
-  applyUserToUI(); // always keep names in sync
+  try{ applyUserToUI(); }catch(e){}
   const today=new Date();
   const months=['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
-  const days=['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+  const days=['Domenica','Lunêdì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const dateStr=days[today.getDay()]+' '+today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
 
   /* Schermata login — guida PWA + pre-compila email */
@@ -6722,33 +6789,43 @@ function onEnter(screen){
   if(screen==='coach-messages'){ setMsgTab('squad'); }
   if(screen==='coach-training'){ buildCoachTraining(); }
   if(screen==='coach-availability'){ buildCoachAvailability(); }
-  if(screen==='player-home'){ buildPlayerHome(); }
+  if(screen==='player-home'){ setTimeout(function(){ try{buildPlayerHome();}catch(e){console.error('buildPlayerHome crash:',e.stack);} },50); }
   if(screen==='player-log'){
-    const ld=document.getElementById('log-date'); if(ld)ld.textContent=today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
-    buildRpeGrid(); buildPainZones(); updateIriPreview();
+    try{
+      const ld=document.getElementById('log-date'); if(ld)ld.textContent=today.getDate()+' '+months[today.getMonth()]+' '+today.getFullYear();
+      buildRpeGrid(); buildPainZones(); updateIriPreview();
+    }catch(e){console.error('player-log crash:',e);}
   }
-  if(screen==='player-tests'){ buildTestCards(); buildTestChartTabs(); setTimeout(()=>buildTestChart(),80); }
+  if(screen==='player-tests'){ try{buildTestCards(); buildTestChartTabs(); setTimeout(()=>buildTestChart(),80);}catch(e){} }
   if(screen==='player-ranking'){
-    const sl=document.getElementById('rank-limit-slider');
-    if(sl){ sl.value=rankLimit; document.getElementById('rank-limit-label').textContent=rankLimit; }
-    buildRankFilters(); buildRankList(); updateMySummary();
+    try{
+      const sl=document.getElementById('rank-limit-slider');
+      if(sl){ sl.value=rankLimit; document.getElementById('rank-limit-label').textContent=rankLimit; }
+      buildRankFilters(); buildRankList(); updateMySummary();
+    }catch(e){console.error('player-ranking crash:',e);}
   }
-  if(screen==='player-settings'){ applyUserToUI(); restoreWearableStates(); }
+  if(screen==='player-settings'){ try{applyUserToUI(); restoreWearableStates();}catch(e){} }
   if(screen==='player-profile'){
-    applyUserToUI();
-    loadProfileDisplay();
-    /* Aggiorna preview badge count */
-    var bcp = document.getElementById('badge-count-preview');
-    if(bcp && typeof getEarnedBadges === 'function'){
-      var r = getEarnedBadges();
-      bcp.textContent = r.earned.length + ' su ' + BADGES.length + ' sbloccati';
-    }
-    setTimeout(function(){ buildIriHistChart(); },80);
+    try{
+      applyUserToUI();
+      loadProfileDisplay();
+      var bcp = document.getElementById('badge-count-preview');
+      if(bcp && typeof getEarnedBadges === 'function'){
+        var r = getEarnedBadges();
+        bcp.textContent = r.earned.length + ' su ' + BADGES.length + ' sbloccati';
+      }
+      setTimeout(function(){ try{buildIriHistChart();}catch(e){} },80);
+    }catch(e){console.error('player-profile crash:',e);}
   }
-  if(screen==='coach-home'){ buildCoachAlerts(); buildCoachTeamRank(); initPushForCoach(); updateCoachHomeBadges(); }
-  if(screen==='coach-squad'){ buildSquadFilters(); buildSquadList(); }
-  if(screen==='faq'){ buildFaqScreen(); }
-  if(screen==='privacy'){ setPrivacyTab(1); }
+  if(screen==='coach-home'){
+    try{buildCoachAlerts();}catch(e){console.error('coach-home crash:',e);}
+    try{buildCoachTeamRank();}catch(e){}
+    try{updateCoachHomeBadges();}catch(e){}
+    /* initPushForCoach solo se richiesto dall'utente */
+  }
+  if(screen==='coach-squad'){ try{buildSquadFilters(); buildSquadList();}catch(e){console.error('coach-squad crash:',e);} }
+  if(screen==='faq'){ try{buildFaqScreen();}catch(e){} }
+  if(screen==='privacy'){ try{setPrivacyTab(1);}catch(e){} }
   if(screen==='player-messages'){ buildPlayerMessages(); }
   if(screen==='coach-messages'){ setMsgTab('squad'); }
   if(screen==='coach-insert-test'){
