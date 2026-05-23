@@ -2269,7 +2269,7 @@ updateClock(); setInterval(updateClock,30000);
 /* ═══ SPLASH ═══ */
 function startSplash(){
   /* Versione app — salvata solo per tracking, NON cancella mai nessun dato */
-  var APP_VERSION = '1.3.2';
+  var APP_VERSION = '1.3.3';
   try{
     var prev = localStorage.getItem('pt_app_version');
     if(prev !== APP_VERSION){
@@ -2792,118 +2792,91 @@ async function doRegister(){
   if(pw&&pw.length<6){ toast('Password di almeno 6 caratteri'); return; }
   if(findLocalUser(email)){ toast('Email già registrata. Accedi.'); return; }
 
-  var role=DATA.regRole;
+  var role=DATA.regRole||'player';
   var fullName=(fName+' '+lName).trim();
-  var teamCode=null;
+  var teamCode='';
   var teamName='';
 
   if(role==='coach'){
     USER.grade   = ((document.getElementById('reg-grade')||{}).value)||'';
     USER.license = ((document.getElementById('reg-license')||{}).value)||'';
     if(DATA._coachMode==='join'){
-      /* Coach entra in squadra esistente con codice */
-      var joinCode = ((document.getElementById('coach-join-code')||{}).value||'').trim().toUpperCase();
-      if(!joinCode){ toast('Inserisci il codice squadra'); return; }
-      teamCode = joinCode;
-      teamName = ''; /* verrà caricato dal DB */
+      teamCode = ((document.getElementById('coach-join-code')||{}).value||'').trim().toUpperCase();
+      if(!teamCode){ toast('Inserisci il codice squadra'); return; }
     } else {
-      /* Coach crea nuova squadra */
       teamName=((document.getElementById('reg-team-name')||{}).value||('Squadra di '+fName)).trim();
       teamCode=genTeamCode(teamName);
     }
-  } else if(role==='player'){
-    /* Read directly from input field */
+  } else {
     var tcInput = document.getElementById('team-code-input');
-    var tcVal = tcInput ? tcInput.value.trim().toUpperCase() : '';
-    if(tcVal) teamCode = tcVal;
-    else if(DATA.regTeams&&DATA.regTeams.length>0) teamCode = DATA.regTeams[0];
-    /* Team code optional for player — can add later */
+    if(tcInput&&tcInput.value) teamCode = tcInput.value.trim().toUpperCase();
   }
 
-  showLoading('Creazione account...');
-  var userId='local_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
-  var savedCloud=false;
+  /* ── STEP 1: Salva SUBITO in locale e vai alla home ── */
+  var userId = 'local_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
 
-  if(SB_READY){
-    try{
-      var dup=await Promise.race([
-        sbQuery('users',{email:email}),
-        new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },4000); })
-      ]);
-      if(dup){ hideLoading(); toast('Email già registrata. Accedi.'); return; }
+  /* Imposta USER completo */
+  var parts = fullName.split(' ');
+  USER.firstName = parts[0]||fName;
+  USER.lastName  = parts.slice(1).join(' ')||'';
+  USER.name      = fullName;
+  USER.email     = email;
+  USER.role      = role;
+  USER.initials  = ((parts[0]||'?')[0]+((parts[1]||parts[0]||'?')[0]||'?')).toUpperCase();
+  USER.id        = userId;
+  USER.teamCode  = teamCode;
+  USER.teamName  = teamName;
+  USER.grade     = USER.grade||'';
+  USER.license   = USER.license||'';
 
-      if(role==='coach' && DATA._coachMode!=='join' && teamName){
-        var tr=await Promise.race([
-          sbInsert('teams',{name:teamName,team_code:teamCode}),
-          new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },4000); })
-        ]);
-        if(tr&&tr.error) throw tr.error;
-      } else if(role==='coach' && DATA._coachMode==='join'){
-        /* Verify team exists */
-        var joinCheck = await sbQuery('teams',{team_code:teamCode});
-        if(!joinCheck){ hideLoading(); toast('Codice squadra non trovato'); return; }
-        teamName = joinCheck.name;
-        USER.teamName = teamName;
-      }
-
-      if(role==='player'&&teamCode){
-        var tcRow=await sbQuery('teams',{team_code:teamCode});
-        if(!tcRow){ hideLoading(); toast('Codice squadra non valido. Verifica con il tuo allenatore.'); return; }
-      }
-
-      var ur=await Promise.race([
-        sbInsert('users',{name:fullName,email:email,role:role,team_code:teamCode,grade:USER.grade||'',license:USER.license||''}),
-        new Promise(function(_,rej){ setTimeout(function(){ rej(new Error('timeout')); },4000); })
-      ]);
-      if(ur&&ur.error) throw ur.error;
-      if(ur&&ur.data&&ur.data[0]) userId=ur.data[0].id;
-      savedCloud=true;
-
-      if(teamCode){
-        var teamRow=await sbQuery('teams',{team_code:teamCode});
-        if(teamRow) await sbInsert('player_teams',{player_id:userId,team_id:teamRow.id});
-      }
-    }catch(e){
-      console.warn('Supabase save failed, using local fallback:',e);
-    }
-  }
-
-  /* Salvataggio locale garantito (sempre) — include password per login offline */
-  saveLocalUser({id:userId,name:fullName,email:email,pw:pw,role:role,team_code:teamCode,team_name:teamName,grade:USER.grade||'',license:USER.license||''});
-
-  clearData();
-  DATA.loginRole=role;
-  /* Imposta TUTTI i campi USER */
-  var parts=(fullName||'Utente').split(' ');
-  USER.firstName=parts[0]||'';
-  USER.lastName=parts.slice(1).join(' ')||'';
-  USER.name=fullName||'';
-  USER.email=email||'';
-  USER.role=role||'player';
-  USER.initials=((parts[0]||'?')[0]+((parts[1]||parts[0]||'?')[0]||'?')).toUpperCase();
-  USER.id=userId||'';
-  USER.teamCode=teamCode||'';
-  USER.teamName=teamName||'';
-  /* Salva sessione ORA — tutti i campi sono completi */
+  /* Salva localmente */
+  saveLocalUser({id:userId,name:fullName,email:email,pw:pw,role:role,
+    team_code:teamCode,team_name:teamName,grade:USER.grade,license:USER.license});
   saveSession(USER);
 
-  hideLoading();
+  /* Vai alla home SUBITO — nessuna attesa */
   go(role==='player'?'player-home':'coach-home');
-  setTimeout(applyUserToUI,100);
-  setTimeout(function(){ try{startOnboarding(role);}catch(e){} },800);
+  toast('Benvenuto '+fName+'! ✓');
 
+  /* Mostra codice squadra al coach */
   if(role==='coach'&&teamCode){
     setTimeout(function(){
-      var note=savedCloud?'Condividi questo codice con i tuoi giocatori:':'Salvato localmente. Codice squadra:';
-      if(confirm('✅ Account creato!\n\n'+note+'\n\n'+teamCode+'\n\nCopiarlo negli appunti?')){
-        if(navigator.clipboard) navigator.clipboard.writeText(teamCode);
-        toast('Codice copiato!');
+      if(confirm('Account creato!\n\nCodice squadra da condividere:\n\n'+teamCode+'\n\nCopiarlo?')){
+        try{ navigator.clipboard.writeText(teamCode); toast('Codice copiato!'); }catch(e){}
       }
-    },900);
-  } else {
-    toast('Benvenuto '+fName+'! Account creato ✓');
-    sendWelcomeEmail(fName, email, role, teamCode);
+    },500);
   }
+
+  /* ── STEP 2: Sincronizza con Supabase in BACKGROUND (non blocca UI) ── */
+  setTimeout(async function(){
+    try{
+      if(!SB_READY) return;
+      /* Crea squadra se coach */
+      if(role==='coach'&&DATA._coachMode!=='join'&&teamName){
+        try{ await sbInsert('teams',{name:teamName,team_code:teamCode}); }catch(e){}
+      }
+      /* Crea utente su Supabase */
+      var ur = await sbInsert('users',{
+        name:fullName,email:email,role:role,
+        team_code:teamCode||null,grade:USER.grade||'',license:USER.license||''
+      });
+      if(ur&&ur.data&&ur.data[0]){
+        var realId = ur.data[0].id;
+        USER.id = realId;
+        /* Aggiorna locale con ID reale */
+        saveLocalUser({id:realId,name:fullName,email:email,pw:pw,role:role,
+          team_code:teamCode,team_name:teamName,grade:USER.grade,license:USER.license});
+        saveSession(USER);
+        /* Collega a squadra */
+        if(teamCode){
+          try{
+            var tr = await sbQuery('teams',{team_code:teamCode});
+            if(tr) await sbInsert('player_teams',{player_id:realId,team_id:tr.id});
+          }catch(e){}
+        }
+      }
+    }catch(e){ console.warn('Supabase background sync:',e.message); }
+  }, 2000);
 }
 
 /* ── CARICA DATI REALI DAL DB ── */
