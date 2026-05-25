@@ -322,7 +322,7 @@ setTimeout(function(){
       if(login) login.classList.add('active');
     }
   }catch(e){}
-}, 2000);
+}, 3000);
 </script>
 
 
@@ -2283,7 +2283,7 @@ function updateClock(){
     if(el) el.textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
   }catch(e){}
 }
-try{ updateClock(); setInterval(updateClock,30000); }catch(e){}
+try{ updateClock(); }catch(e){} try{ setInterval(function(){ try{updateClock();}catch(e){}; },60000); }catch(e){}
 
 /* ═══ SPLASH ═══ */
 function startSplash(){
@@ -2468,26 +2468,18 @@ var db = null;
 var SB_READY = false;
 
 function initSupabase(){
-  /* Ritenta ogni 500ms finché il CDN non è caricato (max 10 tentativi) */
-  var attempts = 0;
-  function tryInit(){
-    attempts++;
-    if(window.supabase && window.supabase.createClient){
-      try{
+  /* Tenta una sola volta dopo 1 secondo — non blocca mai l'app */
+  setTimeout(function(){
+    try{
+      if(window.supabase && window.supabase.createClient){
         db = window.supabase.createClient(SB_URL, SB_KEY, {
-          auth:{ persistSession:false },
-          global:{ headers:{ 'apikey': SB_KEY, 'Authorization':'Bearer '+SB_KEY } }
+          auth:{ persistSession:false }
         });
         SB_READY = true;
-        console.log('✓ PlayerTracker: Supabase connesso');
-      } catch(e){ console.error('Supabase init error:', e); }
-    } else if(attempts < 10){
-      setTimeout(tryInit, 500);
-    } else {
-      console.warn('Supabase SDK non disponibile — modalità offline');
-    }
-  }
-  tryInit();
+        console.log('Supabase OK');
+      }
+    }catch(e){ console.warn('Supabase non disponibile - modalità offline'); }
+  }, 1000);
 }
 
 function showLoading(msg){
