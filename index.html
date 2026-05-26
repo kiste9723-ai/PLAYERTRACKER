@@ -21,8 +21,8 @@ OCTYPE html>
 <title>PlayerTracker</title>
 <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22PlayerTracker%22%2C%22short_name%22%3A%22PT%22%2C%22start_url%22%3A%22%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309111f%22%2C%22theme_color%22%3A%22%2309111f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%2520viewBox%3D'0%200%20192%20192'%253E%253Crect%2520width%3D'192'%2520height%3D'192'%2520rx%3D'40'%2520fill%3D'%2309111f'%2F%253E%253Ctext%2520x%3D'96'%2520y%3D'125'%2520font-size%3D'80'%2520text-anchor%3D'middle'%2520fill%3D'%2316c95d'%2520font-family%3D'Arial'%2520font-weight%3D'bold'%253EPT%253C%2Ftext%253E%253C%2Fsvg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 
@@ -219,7 +219,7 @@ label.field-label{font-size:12px;font-weight:600;color:var(--slate);display:bloc
 
 /* ── ROLE TOGGLE ── */
 .role-toggle{display:flex;background:var(--bg);border-radius:var(--r99);padding:4px;border:1.5px solid var(--border);}
-.role-opt{flex:1;text-align:center;padding:10px;font-size:13px;font-weight:700;border-radius:var(--r99);cursor:pointer;transition:all .2s;color:var(--slate);}
+.role-opt{flex:1;text-align:center;padding:11px 10px;font-size:13px;font-weight:700;border-radius:var(--r99);cursor:pointer;transition:all .2s;color:var(--slate);touch-action:manipulation;background:none;border:none;font-family:inherit;outline:none;-webkit-appearance:none;}
 .role-opt.sel{background:var(--navy);color:#fff;}
 
 /* ── TEAM CODE ── */
@@ -310,19 +310,18 @@ label.field-label{font-size:12px;font-weight:600;color:var(--slate);display:bloc
   </div>
 </div>
 <script>
-/* FALLBACK GARANTITO: nasconde lo splash dopo 2 secondi a prescindere da tutto */
-setTimeout(function(){
-  try{
+/* RIMOZIONE TOTALE SPLASH — eliminato dal DOM dopo 1.5s, impossibile bloccare i tap */
+(function(){
+  function killSplash(){
     var sp = document.getElementById('splash');
-    if(sp){ sp.style.opacity='0'; sp.style.pointerEvents='none'; setTimeout(function(){ sp.style.display='none'; },400); }
-    /* Se nessuna schermata è attiva, mostra il login */
-    var anyActive = document.querySelector('.screen.active');
-    if(!anyActive){
+    if(sp && sp.parentNode){ sp.parentNode.removeChild(sp); }
+    if(!document.querySelector('.screen.active')){
       var login = document.getElementById('s-login');
       if(login) login.classList.add('active');
     }
-  }catch(e){}
-}, 3000);
+  }
+  setTimeout(killSplash, 1500);
+})();
 </script>
 
 
@@ -407,6 +406,7 @@ setTimeout(function(){
     </div>
     <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:2px">Bentornato</div>
     <div style="font-size:13px;color:rgba(143,160,187,.8)">Accedi al tuo account PlayerTracker</div>
+    <div style="font-size:9px;color:rgba(143,160,187,.4);margin-top:4px" data-version>v1.4.3 · button fix</div>
   </div>
 
   <!-- Guida PWA prima apertura -->
@@ -447,8 +447,8 @@ setTimeout(function(){
   <div style="flex:1;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;">
     <div style="margin-bottom:18px">
       <div class="role-toggle" style="margin-bottom:18px">
-        <div class="role-opt sel" id="login-r-player" onclick="setLoginRole('player')">⚽ Giocatore</div>
-        <div class="role-opt" id="login-r-coach" onclick="setLoginRole('coach')">📋 Allenatore</div>
+        <button class="role-opt sel" id="login-r-player" onclick="setLoginRole('player')" type="button">⚽ Giocatore</button>
+        <button class="role-opt" id="login-r-coach" onclick="setLoginRole('coach')" type="button">📋 Allenatore</button>
       </div>
       <div class="field"><label class="field-label">Email</label><input type="email" id="login-email" placeholder="mario@email.com" autocomplete="email"></div>
       <div class="field"><label class="field-label">Password</label>
@@ -458,14 +458,14 @@ setTimeout(function(){
         </div>
       </div>
       <div style="text-align:right;margin-top:-8px;margin-bottom:14px">
-        <span style="font-size:12px;color:var(--green-dark);cursor:pointer;font-weight:600" onclick="showRecover()">Password dimenticata?</span>
+        <button type="button" onclick="showRecover()" style="font-size:12px;color:var(--green-dark);cursor:pointer;font-weight:600;background:none;border:none;padding:0;font-family:inherit;touch-action:manipulation">Password dimenticata?</button>
       </div>
     </div>
-    <button class="btn green" onclick="doLogin()" style="margin-bottom:10px">Accedi →</button>
-    <button onclick="useTransferCode()" style="width:100%;padding:13px;border-radius:var(--r12);border:1.5px solid var(--green-dark);background:transparent;color:var(--green-dark);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px">📲 Usa codice di trasferimento</button>
+    <button type="button" class="btn green" onclick="doLogin()" style="margin-bottom:10px;touch-action:manipulation">Accedi →</button>
+    <button type="button" onclick="useTransferCode()" style="width:100%;padding:13px;border-radius:var(--r12);border:1.5px solid var(--green-dark);background:transparent;color:var(--green-dark);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:14px;touch-action:manipulation">📲 Usa codice di trasferimento</button>
     <div style="text-align:center;margin-bottom:8px">
       <span style="font-size:13px;color:var(--slate)">Nuovo su PlayerTracker? </span>
-      <span style="font-size:13px;font-weight:700;color:var(--green-dark);cursor:pointer" onclick="go('register')">Registrati gratis</span>
+      <button type="button" onclick="go('register')" style="font-size:13px;font-weight:700;color:var(--green-dark);background:none;border:none;padding:0;cursor:pointer;font-family:inherit">Registrati gratis</button>
     </div>
     <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--slate2)">
       Usando l'app accetti i <span style="color:var(--green-dark);cursor:pointer" onclick="openPrivacy()">Termini</span> e la <span style="color:var(--green-dark);cursor:pointer" onclick="openPrivacy()">Privacy Policy</span>
@@ -490,8 +490,8 @@ setTimeout(function(){
       <div style="font-size:15px;font-weight:600;margin-bottom:4px">Scegli il tuo ruolo</div>
       <div style="font-size:13px;color:var(--slate);margin-bottom:20px">Determina le funzioni disponibili</div>
       <div class="role-toggle" style="margin-bottom:20px">
-        <div class="role-opt sel" id="reg-r-player" onclick="setRegRole('player')">Giocatore</div>
-        <div class="role-opt" id="reg-r-coach" onclick="setRegRole('coach')">Allenatore</div>
+        <button class="role-opt sel" id="reg-r-player" onclick="setRegRole('player')" type="button">⚽ Giocatore</button>
+        <button class="role-opt" id="reg-r-coach" onclick="setRegRole('coach')" type="button">📋 Allenatore</button>
       </div>
       <div id="role-desc-player" style="padding:14px;background:var(--green-light);border-radius:var(--r12);border-left:4px solid var(--green)">
         <div style="font-size:13px;font-weight:600;color:var(--green-text)">Giocatore</div>
@@ -2287,10 +2287,11 @@ try{ updateClock(); }catch(e){} try{ setInterval(function(){ try{updateClock();}
 
 /* ═══ SPLASH ═══ */
 function startSplash(){
-  /* Nascondi splash immediatamente e vai al login/home */
-  var splash = document.getElementById('splash');
-  if(splash) splash.style.display = 'none';
-  try{ checkSavedSession(); }catch(e){ go('login'); }
+  try{ localStorage.setItem('pt_app_version','1.4.3'); }catch(e){}
+  /* Lo splash è gestito/rimosso dallo script inline — qui solo routing */
+  try{ checkSavedSession(); }catch(e){
+    try{ go('login'); }catch(e2){}
+  }
 }
 
 
@@ -2387,6 +2388,10 @@ function checkSavedSession(){
   },3000);
 }
 if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',startSplash); } else { setTimeout(startSplash,50); }
+/* Avvia connessione Supabase in background (non blocca mai l'app) */
+try{ initSupabase(); }catch(e){}
+
+/* Nessuna manipolazione dei tocchi — il browser gestisce gli onclick nativamente */
 
 /* Catch globale — se qualcosa crasha mostra il login invece della pagina bianca */
 window.onerror = function(msg, src, line, col, err){
@@ -2455,8 +2460,10 @@ function buildNav(screen){
 /* ═══ AUTH ═══ */
 function setLoginRole(r){
   DATA.loginRole=r;
-  document.getElementById('login-r-player').className='role-opt'+(r==='player'?' sel':'');
-  document.getElementById('login-r-coach').className='role-opt'+(r==='coach'?' sel':'');
+  var p=document.getElementById('login-r-player');
+  var c=document.getElementById('login-r-coach');
+  if(p) p.className='role-opt'+(r==='player'?' sel':'');
+  if(c) c.className='role-opt'+(r==='coach'?' sel':'');
 }
 /* ═══════════════════════════════════════════
    SUPABASE — connessione database reale
@@ -2547,19 +2554,16 @@ async function doLogin(){
     return;
   }
 
-  /* 2. Supabase — 3 tentativi */
+  /* 2. Supabase — un solo tentativo veloce, solo se già pronto */
   showLoading('Cerco il tuo account...');
   var sbUser=null;
-  for(var att=0;att<3;att++){
-    var w=0;while(!SB_READY&&w<20){await new Promise(function(r){setTimeout(r,500);});w++;}
-    if(!SB_READY) break;
+  if(SB_READY){
     try{
       sbUser=await Promise.race([
         sbQuery('users',{email:email}),
-        new Promise(function(res){setTimeout(function(){res(null);},6000);})
+        new Promise(function(res){setTimeout(function(){res(null);},4000);})
       ]);
-      if(sbUser) break;
-    }catch(e){await new Promise(function(r){setTimeout(r,800);});}
+    }catch(e){}
   }
   if(sbUser){
     var tn='';
@@ -3014,10 +3018,14 @@ async function _saveTestAsync(){
 
 function setRegRole(r){
   DATA.regRole=r;
-  document.getElementById('reg-r-player').className='role-opt'+(r==='player'?' sel':'');
-  document.getElementById('reg-r-coach').className='role-opt'+(r==='coach'?' sel':'');
-  document.getElementById('role-desc-player').style.display=r==='player'?'block':'none';
-  document.getElementById('role-desc-coach').style.display=r==='coach'?'block':'none';
+  var p=document.getElementById('reg-r-player');
+  var c=document.getElementById('reg-r-coach');
+  if(p) p.className='role-opt'+(r==='player'?' sel':'');
+  if(c) c.className='role-opt'+(r==='coach'?' sel':'');
+  var dp=document.getElementById('role-desc-player');
+  var dc=document.getElementById('role-desc-coach');
+  if(dp) dp.style.display=r==='player'?'block':'none';
+  if(dc) dc.style.display=r==='coach'?'block':'none';
 }
 function regStep(s){
   /* Valida prima di passare allo step 2 */
@@ -3354,6 +3362,7 @@ function buildTestCards(){
 }
 
 function buildTestChart(){
+  if(typeof Chart === "undefined"){ console.warn("Chart non ancora caricato"); return; }
   const tests=getTests();
   if(!tests[DATA.activeTestChart]) return;
   const t=tests[DATA.activeTestChart];
@@ -5461,6 +5470,7 @@ function showPush(title,body,delay){
    FEATURE 3 — STORICO IRI
 ═══════════════════════════════════════════ */
 function buildIriHistChart(){
+  if(typeof Chart === "undefined"){ console.warn("Chart non ancora caricato"); return; }
   destroyChart('iriHist');
   var canvas=document.getElementById('iriHistChart'); if(!canvas)return;
 
