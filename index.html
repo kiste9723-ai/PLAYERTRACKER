@@ -406,7 +406,7 @@ label.field-label{font-size:12px;font-weight:600;color:var(--slate);display:bloc
     </div>
     <div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:2px">Bentornato</div>
     <div style="font-size:13px;color:rgba(143,160,187,.8)">Accedi al tuo account PlayerTracker</div>
-    <div style="font-size:9px;color:rgba(143,160,187,.4);margin-top:4px" data-version>v1.4.3 · button fix</div>
+    <div style="font-size:9px;color:rgba(143,160,187,.4);margin-top:4px" data-version>v1.4.4 · global fix</div>
   </div>
 
   <!-- Guida PWA prima apertura -->
@@ -2287,7 +2287,7 @@ try{ updateClock(); }catch(e){} try{ setInterval(function(){ try{updateClock();}
 
 /* ═══ SPLASH ═══ */
 function startSplash(){
-  try{ localStorage.setItem('pt_app_version','1.4.3'); }catch(e){}
+  try{ localStorage.setItem('pt_app_version','1.4.4'); }catch(e){}
   /* Lo splash è gestito/rimosso dallo script inline — qui solo routing */
   try{ checkSavedSession(); }catch(e){
     try{ go('login'); }catch(e2){}
@@ -6725,5 +6725,26 @@ function onEnter(screen){
   /* Nav */
   try{ buildNav(screen); }catch(e){}
 }
+/* ═══ EXPORT GLOBALE: garantisce che le funzioni siano accessibili dagli onclick ═══ */
+window.go = go;
+window.setLoginRole = setLoginRole;
+window.setRegRole = setRegRole;
+window.doLogin = doLogin;
+window.doRegister = doRegister;
+window.showRecover = showRecover;
+window.useTransferCode = useTransferCode;
+window.generateTransferCode = generateTransferCode;
+window.regStep = regStep;
+window.doLogout = doLogout;
+window.toast = toast;
+window.setLogType = setLogType;
+window.saveLog = saveLog;
+window.openPlayerDetail = openPlayerDetail;
+window.confirmDeleteAccount = confirmDeleteAccount;
+window.generateTransferCode = generateTransferCode;
+window.emergencyReset = emergencyReset;
+window.openPrivacy = function(){ try{ go('privacy'); }catch(e){} };
 
-
+</script>
+</body>
+</html>
